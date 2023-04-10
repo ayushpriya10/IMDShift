@@ -1,0 +1,7 @@
+# created by virtualenv automatically
+IMDShift/testing_output/
+bin/
+lib/
+IMDShift.egg-info/
+.Python
+pyvenv.cfg
