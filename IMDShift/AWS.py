@@ -121,21 +121,21 @@ class EC2():
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
 
-    def enable_metadata_for_resources(self):
+    def enable_metadata_for_resources(self, hop_limit):
         click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for EC2 resources", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['Placement']['AvailabilityZone'][:-1]
             os.environ['AWS_DEFAULT_REGION'] = region
 
-            # response = self.client.modify_instance_metadata_options(
-            #     InstanceId = resource['InstanceId'],
-            #     HttpTokens = 'required',
-            #     HttpPutResponseHopLimit = 2,
-            #     HttpEndpoint = 'enabled',
-            #     HttpProtocolIpv6 = 'disabled',
-            #     InstanceMetadataTags = 'disabled'
-            # )
+            response = self.client.modify_instance_metadata_options(
+                InstanceId = resource['InstanceId'],
+                HttpTokens = 'required',
+                HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+                HttpEndpoint = 'enabled',
+                HttpProtocolIpv6 = 'disabled',
+                InstanceMetadataTags = 'disabled'
+            )
 
     
     def update_hop_limit_for_resources(self, hop_limit):
@@ -145,31 +145,33 @@ class EC2():
             region = resource['Placement']['AvailabilityZone'][:-1]
             os.environ['AWS_DEFAULT_REGION'] = region
 
-            # response = self.client.modify_instance_metadata_options(
-            #     InstanceId = resource['InstanceId'],
-            #     HttpTokens = 'required',
-            #     HttpPutResponseHopLimit = hop_limit,
-            #     HttpEndpoint = 'enabled',
-            #     HttpProtocolIpv6 = 'disabled',
-            #     InstanceMetadataTags = 'disabled'
-            # )
+            response = self.client.modify_instance_metadata_options(
+                InstanceId = resource['InstanceId'],
+                HttpTokens = 'required',
+                HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+                HttpEndpoint = 'enabled',
+                HttpProtocolIpv6 = 'disabled',
+                InstanceMetadataTags = 'disabled'
+            )
 
 
-    def migrate_resources(self):
+    def migrate_resources(self, hop_limit):
         click.echo(f"[+] Performing migration of EC2 resources to IMDSv2")
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Migrating all EC2 resources to IMDSv2", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
-            region = resource['Placement']['AvailabilityZone'][:-1]
-            os.environ['AWS_DEFAULT_REGION'] = region
+                
+            if resource not in self.resource_with_metadata_disabled and resource not in  self.resources_with_hop_limit_1:
+                region = resource['Placement']['AvailabilityZone'][:-1]
+                os.environ['AWS_DEFAULT_REGION'] = region
 
-            # response = self.client.modify_instance_metadata_options(
-            #     InstanceId = resource['InstanceId'],
-            #     HttpTokens = 'required',
-            #     HttpPutResponseHopLimit = 2,
-            #     HttpEndpoint = 'enabled',
-            #     HttpProtocolIpv6 = 'disabled',
-            #     InstanceMetadataTags = 'disabled'
-            # )
+                response = self.client.modify_instance_metadata_options(
+                    InstanceId = resource['InstanceId'],
+                    HttpTokens = 'required',
+                    HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+                    HttpEndpoint = 'enabled',
+                    HttpProtocolIpv6 = 'disabled',
+                    InstanceMetadataTags = 'disabled'
+                )
 
 
 class Sagemaker():

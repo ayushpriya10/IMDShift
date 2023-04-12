@@ -26,14 +26,21 @@ def trigger_scan(services, included_regions='ALL', excluded_regions=None, migrat
                     ec2_obj.list_resources()
                     ec2_obj.analyse_resources()
 
-                    if enable_imds:
-                        ec2_obj.enable_metadata_for_resources()
-
                     if update_hop_limit != None:
                         ec2_obj.update_hop_limit_for_resources(update_hop_limit)
 
-                    if migrate:
-                        ec2_obj.migrate_resources()
+                        if enable_imds:
+                            ec2_obj.enable_metadata_for_resources(update_hop_limit)
+
+                        if migrate:
+                            ec2_obj.migrate_resources(update_hop_limit)
+
+                    else:
+                        if enable_imds:
+                            ec2_obj.enable_metadata_for_resources()
+
+                        if migrate:
+                            ec2_obj.migrate_resources()
 
 
 def validate_services(services):
@@ -46,8 +53,6 @@ def validate_services(services):
 def validate_regions(regions):
     aws_obj = AWS_Utils()
     enabled_regions = aws_obj.get_enabled_regions()
-
-    # print(enabled_regions)
 
     for region in regions:
         if region not in enabled_regions:
