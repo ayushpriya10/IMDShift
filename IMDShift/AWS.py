@@ -121,7 +121,7 @@ class EC2():
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
 
-    def enable_metadata_for_resources(self, hop_limit):
+    def enable_metadata_for_resources(self, hop_limit=None):
         click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for EC2 resources", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
@@ -138,7 +138,7 @@ class EC2():
             )
 
     
-    def update_hop_limit_for_resources(self, hop_limit):
+    def update_hop_limit_for_resources(self, hop_limit=None):
         click.echo(f"[+] Updating hop limit for resources with metadata enabled")
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for EC2 resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
@@ -155,7 +155,7 @@ class EC2():
             )
 
 
-    def migrate_resources(self, hop_limit):
+    def migrate_resources(self, hop_limit=None):
         click.echo(f"[+] Performing migration of EC2 resources to IMDSv2")
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Migrating all EC2 resources to IMDSv2", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
