@@ -3,7 +3,7 @@ import click
 import json
 import os
 import sys
-
+from utilities import generate_client
 from prettytable import PrettyTable
 from time import sleep
 from tqdm import tqdm
@@ -253,13 +253,54 @@ class Lightsail():
 
 
 class ECS():
+    
+    resource_list = list()
+    resources_with_imds_v1 = list()
+    resource_with_metadata_disabled = list()
+    resources_with_hop_limit_1 = list()
 
-    def __init__(self) -> None:
-        ...
+
+    def __init__(self, included_regions=None, excluded_regions=None) -> None:
+        self.incuded_regions = included_regions
+        self.excluded_regions = excluded_regions
+        self.enabled_regions = AWS_Utils.get_enabled_regions()
+        
+
+    def generate_client(self, included_region):
+
+        if self.included_region == "ALL":
+            for region in self.enabled_regions:
+                ecs = generate_client("ecs", region)
+                print(f"[+]Listing ECS Cluster for: {region}")
+                self.list_resources(self, ecs)
+
+        if self.included_region != None and self.incuded_regions != "ALL":
+            for region in self.incuded_regions:
+                ecs = boto3.client("ecs", region_name=region)
+                print(f"[+]List ECS Cluster for: {region}")
+                self.list_resources(self,)
+
+    def list_resources(self, ecs):
+        if self.included_region == "ALL":
+            for region in self.enabled_regions:
+                ecs = generate_client("ecs", region)
+                print(f"[+]Listing ECS Cluster for: {region}")
+                result = []
+                marker = None
+                while True:
+                    if marker:
+                        clusters = ecs.list_clusters(
+                            nextToken=marker
+                        )
+                        arns = clusters["clusterArns"]
+                        for cluster in arns:
+                            self.an
+                
 
 
-    def list_resources(self):
-        ...
+            
+
+
 
 
     def analyse_resources(self):
