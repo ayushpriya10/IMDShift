@@ -1,5 +1,6 @@
 import click
 import sys
+import boto3
 
 from time import sleep
 from tqdm import tqdm
@@ -41,6 +42,11 @@ def trigger_scan(services, included_regions='ALL', excluded_regions=None, migrat
 
                         if migrate:
                             ec2_obj.migrate_resources()
+                
+                elif service == "ECS":
+                    ecs_obj = ECS(included_regions=included_regions, excluded_regions=excluded_regions)
+                    ec2_obj.generate_client()
+
 
 
 def validate_services(services):
@@ -58,3 +64,10 @@ def validate_regions(regions):
         if region not in enabled_regions:
             click.secho(f'[!] "{region}" is either invalid region or is not enabled. Exiting.', bold=True, fg='red')
             sys.exit(1)
+
+def generate_client(resource, region):
+    print(f"[+]Generating Client: {resource} -> {region}")
+    client_obj = boto3.client(resource, region_name=region)
+    return client_obj
+
+
