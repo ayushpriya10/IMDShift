@@ -3,7 +3,6 @@ import click
 import json
 import os
 import sys
-from utilities import generate_client
 from prettytable import PrettyTable
 from time import sleep
 from tqdm import tqdm
@@ -14,84 +13,48 @@ DEBUG = True
 
 class AWS_Utils():
 
-    def __init__(self) -> None:
-        client = boto3.client('ec2')
-        self.enabled_regions = \
-            [region['RegionName']\
-              for region in client.describe_regions()['Regions']\
-                  if region['OptInStatus'] in ["opt-in-not-required", "opted-in"]]
-        
-    
     def get_enabled_regions(self):
-        return self.enabled_regions
-
-
-class EC2():
-
-    client = boto3.client('ec2')
-    resource_list = list()
-    resources_with_imds_v1 = list()
-    resource_with_metadata_disabled = list()
-    resources_with_hop_limit_1 = list()
-
-
-    def __init__(self, included_regions=None, excluded_regions=None) -> None:
-        self.included_regions = included_regions
-        self.excluded_regions = excluded_regions
-        self.enabled_regions = AWS_Utils().get_enabled_regions()
-
-
-    def list_resources(self):
+        client = boto3.client('ec2')
+        enabled_regions = [region['RegionName']\
+                           for region in client.describe_regions()['Regions']\
+                            if region['OptInStatus'] in ["opt-in-not-required", "opted-in"]]
         
-        if self.included_regions == 'ALL':
+        return enabled_regions
 
-            for region in self.enabled_regions:
+    def generate_client(self, resource, region):
+        client_obj = boto3.client(resource, region_name=region)
+        return client_obj
 
-                if self.excluded_regions != None and region in self.excluded_regions:
-                    self.enabled_regions.pop(self.enabled_regions.index(region))
-                    continue
-
-                os.environ['AWS_DEFAULT_REGION'] = region
-                self.resource_list += self.client.describe_instances()['Reservations'][0]['Instances']
-
-            # if DEBUG:
-            #     pass
-            #     print(self.resource_list['ap-south-1']['Reservations'][0]['Instances'][0])
-            #     print(f"All enabled regions: {AWS_Utils().get_enabled_regions()}")
-            #     print(f"Enabled regions: {self.enabled_regions}")
-            #     print(f"Resource list regions: {self.resource_list}")
-
-
-        if self.included_regions != None and self.included_regions != 'ALL':
-
-            for region in self.included_regions:
-
-                os.environ['AWS_DEFAULT_REGION'] = region
-                self.resource_list += self.client.describe_instances()['Reservations'][0]['Instances']
-
-            # if DEBUG:
-            #     pass
-                # print(self.resource_list)
-                # print(f"All enabled regions: {AWS_Utils().get_enabled_regions()}")
-                # print(f"Enabled regions: {self.enabled_regions}")
-                # print(f"Resource list regions: {self.resource_list}")
-
-
-
-        # if DEBUG:
-        #     pass
-        #     with open('/Users/ayushpriya/work/Projects/IMDShift/IMDShift/testing_output/ec2-resources.json', 'w') as fh:
-        #         fh.write(json.dumps(self.resource_list, default=str, indent=4))
-
+        
+class EC2():
+    
+    def __init__(self, regions=None) -> None:
+        self.regions = regions
+        self.aws_utils = AWS_Utils()
+        self.ec2 = None
+        self.resource_list = list()
+        self.resources_with_imds_v1 = list()
+        self.resource_with_metadata_disabled = list()
+        self.resources_with_hop_limit_1 = list()
+    
+    def generate_result(self):
+        for region in self.regions:
+            print(region)
+            self.process_result(region)
+    
+    def process_result(self, region):
+        self.ec2 = self.aws_utils.generate_client("ec2", region)
+        instances_details = self.ec2.describe_instances()['Reservations']
+        for instance in instances_details:
+            instance = instance["Instances"]
+            self.resource_list += instance
+        self.analyse_resources()
+    
 
     def analyse_resources(self):
 
-        # if DEBUG:
-        #     pass
-        #     with open('/Users/ayushpriya/work/Projects/IMDShift/IMDShift/testing_output/ec2-resources.json') as fh:
-        #         self.resource_list = json.loads(fh.read())
-
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing EC2 resources", colour='green', unit=' resources')
+        
         for resource in progress_bar_with_resources:
             if resource['MetadataOptions']['HttpEndpoint'] == 'disabled':
                 self.resource_with_metadata_disabled.append(resource)
@@ -102,9 +65,10 @@ class EC2():
             if resource['MetadataOptions']['HttpPutResponseHopLimit'] == 1:
                 self.resources_with_hop_limit_1.append(resource)
 
+
         stats_table = PrettyTable()
-        stats_table.align = 'c' # Horizontal Center Alignment
-        stats_table.valign = 'c' # Vertical Center Alignment
+        stats_table.align = 'c' 
+        stats_table.valign = 'c' 
         stats_table.field_names = ['Metadata Disabled', 'IMDSv1 Enabled', 'Hop Limit = 1', 'Total Resources']
         stats_table.add_row(
             [
@@ -120,15 +84,13 @@ class EC2():
         click.echo(f"[+] Statistics from analysis:")
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
-
-    def enable_metadata_for_resources(self, hop_limit=None):
+    def enable_metadata_for_resources(self, hop_limit=None, all_resource=None, resource_list=None):
         click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for EC2 resources", colour='green', unit=' resources')
+        
         for resource in progress_bar_with_resources:
             region = resource['Placement']['AvailabilityZone'][:-1]
-            os.environ['AWS_DEFAULT_REGION'] = region
-
-            response = self.client.modify_instance_metadata_options(
+            response = self.ec2.modify_instance_metadata_options(
                 InstanceId = resource['InstanceId'],
                 HttpTokens = 'required',
                 HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
@@ -138,14 +100,14 @@ class EC2():
             )
 
     
-    def update_hop_limit_for_resources(self, hop_limit=None):
+    def update_hop_limit_for_resources(self, hop_limit=None, all_resource=None, resource_list=None):
         click.echo(f"[+] Updating hop limit for resources with metadata enabled")
+        #DEBUG
+        if resource_list == None:
+            resource_list = all_resource
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for EC2 resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
-            region = resource['Placement']['AvailabilityZone'][:-1]
-            os.environ['AWS_DEFAULT_REGION'] = region
-
-            response = self.client.modify_instance_metadata_options(
+            response = self.ec2.modify_instance_metadata_options(
                 InstanceId = resource['InstanceId'],
                 HttpTokens = 'required',
                 HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
@@ -153,6 +115,7 @@ class EC2():
                 HttpProtocolIpv6 = 'disabled',
                 InstanceMetadataTags = 'disabled'
             )
+
 
 
     def migrate_resources(self, hop_limit=None):
@@ -166,7 +129,7 @@ class EC2():
 
                 response = self.client.modify_instance_metadata_options(
                     InstanceId = resource['InstanceId'],
-                    HttpTokens = 'required',
+                    HttpTokens = "required",
                     HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
                     HttpEndpoint = 'enabled',
                     HttpProtocolIpv6 = 'disabled',
@@ -254,53 +217,66 @@ class Lightsail():
 
 class ECS():
     
-    resource_list = list()
-    resources_with_imds_v1 = list()
-    resource_with_metadata_disabled = list()
-    resources_with_hop_limit_1 = list()
 
+    def __init__(self, regions=None) -> None:
+        self.regions = regions
+        self.aws_utils = AWS_Utils()
+    
+    # Return main result
+    def process_result(self, region):
+        ec2 = self.aws_utils.generate_client("ec2", region)
+        ecs = self.aws_utils.generate_client("ecs", region)
+        clusters = self.list_resources(ecs)
+        instance_data = self.container_instance(clusters, ecs, ec2)
+        print(len(instance_data))
+        ec2_obj = EC2()
+        ec2_obj.resource_list = instance_data
+        ec2_obj.analyse_resources()
 
-    def __init__(self, included_regions=None, excluded_regions=None) -> None:
-        self.incuded_regions = included_regions
-        self.excluded_regions = excluded_regions
-        self.enabled_regions = AWS_Utils.get_enabled_regions()
-        
-
-    def generate_client(self, included_region):
-
-        if self.included_region == "ALL":
-            for region in self.enabled_regions:
-                ecs = generate_client("ecs", region)
-                print(f"[+]Listing ECS Cluster for: {region}")
-                self.list_resources(self, ecs)
-
-        if self.included_region != None and self.incuded_regions != "ALL":
-            for region in self.incuded_regions:
-                ecs = boto3.client("ecs", region_name=region)
-                print(f"[+]List ECS Cluster for: {region}")
-                self.list_resources(self,)
-
-    def list_resources(self, ecs):
-        if self.included_region == "ALL":
-            for region in self.enabled_regions:
-                ecs = generate_client("ecs", region)
-                print(f"[+]Listing ECS Cluster for: {region}")
-                result = []
-                marker = None
-                while True:
-                    if marker:
-                        clusters = ecs.list_clusters(
-                            nextToken=marker
-                        )
-                        arns = clusters["clusterArns"]
-                        for cluster in arns:
-                            self.an
+    # Seggregates regions and then process it accordingly
+    def generate_results(self):
+        for region in self.regions:
+            print(region)
+            self.process_result(region)
                 
 
+    def list_resources(self, ecs):
+        result = []
+        marker = None
+        while True:
+            if marker:
+                arns = ecs.list_clusters(
+                    nextToken=marker
+                )["clusterArns"]
+                for cluster in arns:
+                    result.append(cluster)
+            
+            else:
+                arns = ecs.list_clusters()["clusterArns"]
+                for cluster in arns:
+                    result.append(cluster)
+            
+            if "nextToken" in arns:
+                marker = arns["nextToken"]
+            else:
+                return result
+                
+
+    def container_instance(self, clusters, ecs, ec2):
+        result = []
+        for cluster in clusters:
+            instances = ecs.list_container_instances(cluster=cluster)["containerInstanceArns"]
+            if len(instances) > 0:
+                describe_instance = ecs.describe_container_instances(cluster=cluster, containerInstances=instances)["containerInstances"]
+                instance_id = [instance_id["ec2InstanceId"] for instance_id in describe_instance]
+                instance_details = ec2.describe_instances(InstanceIds=instance_id)["Reservations"]
+                for instance in instance_details:
+                    instance = instance["Instances"]
+                    result += instance
+                
+        return result
 
             
-
-
 
 
     def analyse_resources(self):

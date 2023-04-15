@@ -2,8 +2,7 @@ import click
 import sys
 
 
-from .utilities import trigger_scan, validate_services, validate_regions
-
+from .utilities import trigger_scan, validate_services, ScanRegion, validate_regions
 CLI_PROMPT = """
  /$$$$$$ /$$      /$$ /$$$$$$$   /$$$$$$  /$$       /$$  /$$$$$$   /$$    
 |_  $$_/| $$$    /$$$| $$__  $$ /$$__  $$| $$      |__/ /$$__  $$ | $$    
@@ -34,27 +33,8 @@ def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_
 
     else:
         services = [service.strip() for service in services.split(',')]
-        validate_services(services)
-
+        regions = ScanRegion(included_regions=include_regions, excluded_regions=exclude_regions).result()
         click.echo(f"[+] Scanning specified services: {', '.join(services)}")
-
-        if include_regions == 'ALL':
-            if exclude_regions == None:
-                click.echo("[+] Scanning all regions, no regions specified to exclude")
-                trigger_scan(services=services, migrate=migrate, update_hop_limit=update_hop_limit, enable_imds=enable_imds)
-            
-            if exclude_regions != None:
-                exclude_regions = [region.strip() for region in exclude_regions.split(',')]
-                validate_regions(exclude_regions)
-
-                click.echo(f"[+] Scanning all regions except: {', '.join(exclude_regions)}")
-                trigger_scan(services=services, excluded_regions=exclude_regions, migrate=migrate, update_hop_limit=update_hop_limit, enable_imds=enable_imds)
-
-        else:
-            include_regions = [region.strip() for region in include_regions.split(',')]
-            validate_regions(include_regions)
-
-            click.echo(f"[+] Scanning specified regions: {', '.join(include_regions)}")
-
-            trigger_scan(services=services, included_regions=include_regions, migrate=migrate, update_hop_limit=update_hop_limit, enable_imds=enable_imds)
-
+        click.echo(f"[+] Scanning Region: {regions}")
+        validate_services(services)
+        trigger_scan(services=services,regions=regions, migrate=migrate, update_hop_limit=update_hop_limit, enable_imds=enable_imds)
