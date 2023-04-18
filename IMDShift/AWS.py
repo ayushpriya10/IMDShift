@@ -39,15 +39,14 @@ class EC2():
     
     def generate_result(self):
         for region in self.regions:
-            print(region)
             self.process_result(region)
     
     def process_result(self, region):
         self.ec2 = self.aws_utils.generate_client("ec2", region)
-        instances_details = self.ec2.describe_instances()['Reservations']
-        for instance in instances_details:
-            instance = instance["Instances"]
-            self.resource_list += instance
+        instances_details = self.ec2.get_paginator('describe_instances')
+        for page in instances_details.paginate():
+            for reservation in page['Reservations']:
+                self.resource_list.extend(reservation['Instances'])
         self.analyse_resources()
     
 
@@ -56,15 +55,16 @@ class EC2():
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing EC2 resources", colour='green', unit=' resources')
         
         for resource in progress_bar_with_resources:
+            
             if resource['MetadataOptions']['HttpEndpoint'] == 'disabled':
                 self.resource_with_metadata_disabled.append(resource)
-
+            
             if resource['MetadataOptions']['HttpTokens'] != 'required':
                 self.resources_with_imds_v1.append(resource)
-
+            
             if resource['MetadataOptions']['HttpPutResponseHopLimit'] == 1:
                 self.resources_with_hop_limit_1.append(resource)
-
+            
 
         stats_table = PrettyTable()
         stats_table.align = 'c' 
@@ -84,7 +84,7 @@ class EC2():
         click.echo(f"[+] Statistics from analysis:")
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
-    def enable_metadata_for_resources(self, hop_limit=None, all_resource=None, resource_list=None):
+    def enable_metadata_for_resources(self, hop_limit=None):
         click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for EC2 resources", colour='green', unit=' resources')
         
@@ -100,11 +100,8 @@ class EC2():
             )
 
     
-    def update_hop_limit_for_resources(self, hop_limit=None, all_resource=None, resource_list=None):
+    def update_hop_limit_for_resources(self, hop_limit=None):
         click.echo(f"[+] Updating hop limit for resources with metadata enabled")
-        #DEBUG
-        if resource_list == None:
-            resource_list = all_resource
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for EC2 resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             response = self.ec2.modify_instance_metadata_options(
@@ -122,11 +119,8 @@ class EC2():
         click.echo(f"[+] Performing migration of EC2 resources to IMDSv2")
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Migrating all EC2 resources to IMDSv2", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
-                
             if resource not in self.resource_with_metadata_disabled and resource not in  self.resources_with_hop_limit_1:
                 region = resource['Placement']['AvailabilityZone'][:-1]
-                os.environ['AWS_DEFAULT_REGION'] = region
-
                 response = self.client.modify_instance_metadata_options(
                     InstanceId = resource['InstanceId'],
                     HttpTokens = "required",
@@ -214,112 +208,102 @@ class Lightsail():
     def migrate_resources(self):
         ...
 
-
+# Elastic Container Service
 class ECS():
-    
 
-    def __init__(self, regions=None) -> None:
+    def __init__(self, regions=None, ec2_obj=None):
         self.regions = regions
+        self.ec2_obj = ec2_obj
         self.aws_utils = AWS_Utils()
-    
-    # Return main result
-    def process_result(self, region):
-        ec2 = self.aws_utils.generate_client("ec2", region)
-        ecs = self.aws_utils.generate_client("ecs", region)
-        clusters = self.list_resources(ecs)
-        instance_data = self.container_instance(clusters, ecs, ec2)
-        print(len(instance_data))
-        ec2_obj = EC2()
-        ec2_obj.resource_list = instance_data
-        ec2_obj.analyse_resources()
+        self.ec2 = None
+        self.ecs = None
 
-    # Seggregates regions and then process it accordingly
+    def process_result(self, region, ec2_obj=None):
+        self.ec2 = self.aws_utils.generate_client("ec2", region)
+        self.ecs = self.aws_utils.generate_client("ecs", region)
+        clusters = self.list_clusters()
+        instance_data = self.container_instance_data(clusters)
+        self.ec2_obj.resource_list = instance_data
+        self.ec2_obj.analyse_resources()
+
     def generate_results(self):
         for region in self.regions:
             print(region)
             self.process_result(region)
-                
 
-    def list_resources(self, ecs):
+    def list_clusters(self):
         result = []
-        marker = None
-        while True:
-            if marker:
-                arns = ecs.list_clusters(
-                    nextToken=marker
-                )["clusterArns"]
-                for cluster in arns:
-                    result.append(cluster)
-            
-            else:
-                arns = ecs.list_clusters()["clusterArns"]
-                for cluster in arns:
-                    result.append(cluster)
-            
-            if "nextToken" in arns:
-                marker = arns["nextToken"]
-            else:
-                return result
-                
-
-    def container_instance(self, clusters, ecs, ec2):
-        result = []
-        for cluster in clusters:
-            instances = ecs.list_container_instances(cluster=cluster)["containerInstanceArns"]
-            if len(instances) > 0:
-                describe_instance = ecs.describe_container_instances(cluster=cluster, containerInstances=instances)["containerInstances"]
-                instance_id = [instance_id["ec2InstanceId"] for instance_id in describe_instance]
-                instance_details = ec2.describe_instances(InstanceIds=instance_id)["Reservations"]
-                for instance in instance_details:
-                    instance = instance["Instances"]
-                    result += instance
-                
+        paginator = self.ecs.get_paginator('list_clusters')
+        for page in paginator.paginate():
+            result.extend(page['clusterArns'])
         return result
 
-            
+    def container_instance_data(self, clusters):
+        result = []
+        for cluster in clusters:
+            paginator = self.ecs.get_paginator('list_container_instances')
+            for page in paginator.paginate(cluster=cluster):
+                container_instance_arns = page['containerInstanceArns']
+                if container_instance_arns:
+                    describe_instances = self.ecs.describe_container_instances(cluster=cluster, containerInstances=container_instance_arns)['containerInstances']
+                    instance_ids = [instance['ec2InstanceId'] for instance in describe_instances]
+                    instance_details = self.ec2.describe_instances(InstanceIds=instance_ids)['Reservations']
+                    for reservation in instance_details:
+                        result.extend(reservation['Instances'])
+        return result
 
-
-    def analyse_resources(self):
-        ...
-
-
-    def enable_metadata_for_resources(self):
-        ...
-
-    
-    def update_hop_limit_for_resources(self):
-        ...
-
-
-    def migrate_resources(self):
-        ...
-
-
+# Elastic Kubernetes Service
 class EKS():
 
-    def __init__(self) -> None:
-        ...
+    def __init__(self, regions=None, ec2_obj=None):
+        self.regions = regions
+        self.ec2_obj = ec2_obj
+        self.aws_utils = AWS_Utils()
+        self.ec2 = None
+        self.eks = None
+        self.autoscaling = None
 
+    def process_result(self, region):
+        self.eks = self.aws_utils.generate_client("eks", region)
+        self.ec2 = self.aws_utils.generate_client("ec2", region)
+        self.autoscaling = self.aws_utils.generate_client("autoscaling", region)
+        clusters = self.list_clusters()
+        instance_data = self.eks_nodegroups(clusters)
+        self.ec2_obj.resource_list = instance_data
+        self.ec2_obj.analyse_resources()
+        
+    def generate_results(self):
+        for region in self.regions:
+            self.process_result(region)
 
-    def list_resources(self):
-        ...
+    def list_clusters(self):
+        result = []
+        paginator = self.eks.get_paginator('list_clusters')
+        for page in paginator.paginate():
+            result.extend(page['clusters'])
+        return result
 
+    def eks_nodegroups(self, clusters):
+        instance_ids = []
+        for cluster in clusters:
+            paginator = self.eks.get_paginator('list_nodegroups')
+            for page in paginator.paginate(clusterName=cluster):
+                for node_group_name in page['nodegroups']:
+                    node_group_details = self.eks.describe_nodegroup(clusterName=cluster, nodegroupName=node_group_name)
+                    auto_scaling_groups = node_group_details["nodegroup"]["resources"]["autoScalingGroups"]
+                    for asg in auto_scaling_groups:
+                        asg_details = self.autoscaling.describe_auto_scaling_groups(AutoScalingGroupNames=[asg["name"]])["AutoScalingGroups"][0]["Instances"]
+                        instance_ids.extend([instance["InstanceId"] for instance in asg_details])
+        instance_data = self.process_instancedata(instance_ids)
+        return instance_data
 
-    def analyse_resources(self):
-        ...
-
-
-    def enable_metadata_for_resources(self):
-        ...
-
-    
-    def update_hop_limit_for_resources(self):
-        ...
-
-
-    def migrate_resources(self):
-        ...
-
+    def process_instancedata(self, instance_ids):
+        result = []
+        paginator = self.ec2.get_paginator('describe_instances')
+        for page in paginator.paginate(InstanceIds=instance_ids):
+            for reservation in page['Reservations']:
+                result.extend(reservation['Instances'])
+        return result
 
 class Beanstalk():
 

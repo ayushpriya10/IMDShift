@@ -90,23 +90,49 @@ def trigger_scan(services, regions=None, migrate=False, \
 
                 
                 elif service == "ECS":
-                    ecs_obj = ECS(regions=regions)
+                    ec2_obj = EC2()
+                    ecs_obj = ECS(regions=regions, ec2_obj=ec2_obj)
                     ecs_obj.generate_results()
+
                     if update_hop_limit != None:
-                        ecs_obj.update_hop_limit_for_resources(update_hop_limit)
+                        ec2_obj.update_hop_limit_for_resources(update_hop_limit)
 
                         if enable_imds:
-                            ecs_obj.enable_metadata_for_resources(update_hop_limit)
+                            ec2_obj.enable_metadata_for_resources(update_hop_limit)
 
                         if migrate:
-                            ecs_obj.migrate_resources(update_hop_limit)
+                            ec2_obj.migrate_resources(update_hop_limit)
 
                     else:
                         if enable_imds:
-                            ecs_obj.enable_metadata_for_resources()
+                            ec2_obj.enable_metadata_for_resources()
 
                         if migrate:
-                            ecs_obj.migrate_resources()
+                            ec2_obj.migrate_resources()
+                
+                
+                elif service == "EKS":
+                    ec2_obj = EC2()
+                    eks_obj = EKS(regions=regions, ec2_obj=ec2_obj)
+                    eks_obj.generate_results()
+
+                    if update_hop_limit != None:
+                        ec2_obj.update_hop_limit_for_resources(update_hop_limit)
+
+                        if enable_imds:
+                            ec2_obj.enable_metadata_for_resources(update_hop_limit)
+
+                        if migrate:
+                            ec2_obj.migrate_resources(update_hop_limit)
+
+                    else:
+                        if enable_imds:
+                            ec2_obj.enable_metadata_for_resources()
+
+                        if migrate:
+                            ec2_obj.migrate_resources()
+
+
                 
 
 
