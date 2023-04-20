@@ -83,28 +83,30 @@ class EC2():
         # click.echo(f"[+] Analysed all EC2 resources")
         click.echo(f"[+] Statistics from analysis:")
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
-
+        
     def enable_metadata_for_resources(self, hop_limit=None):
         click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for EC2 resources", colour='green', unit=' resources')
-        
         for resource in progress_bar_with_resources:
             region = resource['Placement']['AvailabilityZone'][:-1]
-            response = self.ec2.modify_instance_metadata_options(
+            ec2 = self.aws_utils.generate_client("ec2", region)
+            response = ec2.modify_instance_metadata_options(
                 InstanceId = resource['InstanceId'],
                 HttpTokens = 'required',
                 HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
                 HttpEndpoint = 'enabled',
                 HttpProtocolIpv6 = 'disabled',
                 InstanceMetadataTags = 'disabled'
-            )
+            ) 
 
     
     def update_hop_limit_for_resources(self, hop_limit=None):
         click.echo(f"[+] Updating hop limit for resources with metadata enabled")
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for EC2 resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
-            response = self.ec2.modify_instance_metadata_options(
+            region = resource['Placement']['AvailabilityZone'][:-1]
+            ec2 = self.aws_utils.generate_client("ec2", region)
+            response = ec2.modify_instance_metadata_options(
                 InstanceId = resource['InstanceId'],
                 HttpTokens = 'required',
                 HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
@@ -121,7 +123,8 @@ class EC2():
         for resource in progress_bar_with_resources:
             if resource not in self.resource_with_metadata_disabled and resource not in  self.resources_with_hop_limit_1:
                 region = resource['Placement']['AvailabilityZone'][:-1]
-                response = self.client.modify_instance_metadata_options(
+                ec2 = self.aws_utils.generate_client("ec2", region)
+                response = ec2.modify_instance_metadata_options(
                     InstanceId = resource['InstanceId'],
                     HttpTokens = "required",
                     HttpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
@@ -159,28 +162,43 @@ class Sagemaker():
 
 class ASG():
 
-    def __init__(self) -> None:
-        ...
+    def __init__(self, regions=None, ec2_obj=None):
+        self.regions = regions
+        self.ec2_obj = ec2_obj
+        self.aws_utils = AWS_Utils()
+        self.ec2 = None
+        self.autoscaling = None    
 
+    def generate_results(self):
+        for region in self.regions:
+            self.process_result(region)
 
-    def list_resources(self):
-        ...
+    def process_result(self, region):
+        self.autoscaling = self.aws_utils.generate_client("autoscaling", region)
+        self.ec2 = self.aws_utils.generate_client("ec2", region)
+        instances = self.list_asg_instances()
+        instance_data = self.asg_instance_data(instances)
+        self.ec2_obj.resource_list = instance_data
+        self.ec2_obj.analyse_resources()
 
+    def list_asg_instances(self):
+        result = []
+        paginator = self.autoscaling.get_paginator('describe_auto_scaling_groups')
+        for page in paginator.paginate():
+            for as_group in page["AutoScalingGroups"]:
+                instances = as_group["Instances"]
+                for instance in instances:
+                    instance_id = instance['InstanceId']
+                    result.append(instance_id)
+        return result
 
-    def analyse_resources(self):
-        ...
-
-
-    def enable_metadata_for_resources(self):
-        ...
-
-    
-    def update_hop_limit_for_resources(self):
-        ...
-
-
-    def migrate_resources(self):
-        ...
+    def asg_instance_data(self, instance_ids):
+        result = []
+        paginator = self.ec2.get_paginator('describe_instances')
+        for page in paginator.paginate(InstanceIds=instance_ids):
+            for reservation in page['Reservations']:
+                result.extend(reservation['Instances'])
+        return result
 
 
 class Lightsail():
@@ -263,6 +281,10 @@ class EKS():
         self.eks = None
         self.autoscaling = None
 
+    def generate_results(self):
+        for region in self.regions:
+            self.process_result(region)
+    
     def process_result(self, region):
         self.eks = self.aws_utils.generate_client("eks", region)
         self.ec2 = self.aws_utils.generate_client("ec2", region)
@@ -271,10 +293,6 @@ class EKS():
         instance_data = self.eks_nodegroups(clusters)
         self.ec2_obj.resource_list = instance_data
         self.ec2_obj.analyse_resources()
-        
-    def generate_results(self):
-        for region in self.regions:
-            self.process_result(region)
 
     def list_clusters(self):
         result = []
