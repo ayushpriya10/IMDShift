@@ -17,43 +17,48 @@ class ScanRegion():
         self.all_regions = self.aws_utils.get_enabled_regions(profile, role_arn)
         self.included_regions = included_regions or "ALL"
         self.excluded_regions = excluded_regions or []
-
+        
         if isinstance(self.included_regions, str):
-            self.included_regions = self.included_regions.split(" ")
-            if self.included_regions != "ALL":
-                self.included_regions = [region.strip(",") for region in self.included_regions]
+            self.included_regions = self.included_regions.split(",")
+            if self.included_regions != ["ALL"]:
+                self.included_regions = [region.strip(" ") for region in self.included_regions]
+            else:
+                self.scan_regions = self.all_regions
         else:
             self.included_regions = list(self.included_regions)
 
         self.scan_regions = []
-        if self.included_regions == "ALL":
+        
+        if self.included_regions == ["ALL"]:
             self.scan_regions = self.all_regions
         else:
             for region in self.included_regions:
                 if region in self.all_regions:
                     self.scan_regions.append(region)
-        
+
         if isinstance(self.excluded_regions, str):
-            self.excluded_regions = self.excluded_regions.split(" ")
+            self.excluded_regions = self.excluded_regions.split(",")
             if "ALL" in self.included_regions:
                 for region in self.excluded_regions:
-                    region = region.strip(",")
+                    region = region.strip(" ")
                     if region in self.all_regions:
                         self.all_regions.remove(region)
                 for region in self.all_regions:
                     self.scan_regions.append(region)
             else:
                 for region in self.excluded_regions:
-                    region = region.strip(",")
+                    region = region.strip(" ")
                     if region in self.scan_regions:
                         self.scan_regions.remove(region)
+
+        if (isinstance(self.included_regions, list) and len(self.included_regions) == 1) and (self.included_regions[0] == "ALL"):
+            self.scan_regions = self.all_regions
 
         if not self.scan_regions:
             print("No regions to scan.")
             return
-        print(f"Scanning regions: {', '.join(self.scan_regions)}")
-
         
+
     def result(self):
         return self.scan_regions
 
