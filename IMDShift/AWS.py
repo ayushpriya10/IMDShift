@@ -13,25 +13,63 @@ DEBUG = True
 
 class AWS_Utils():
 
-    def get_enabled_regions(self):
-        client = boto3.client('ec2')
+    def get_enabled_regions(self, profile=None, role_arn=None):
+        client = self.generate_client(resource="ec2", region=None, profile=profile, role_arn=role_arn)
         enabled_regions = [region['RegionName']\
                            for region in client.describe_regions()['Regions']\
                             if region['OptInStatus'] in ["opt-in-not-required", "opted-in"]]
         
         return enabled_regions
 
-    def generate_client(self, resource, region):
-        client_obj = boto3.client(resource, region_name=region)
-        return client_obj
 
+    def generate_client(self, resource, region=None, profile=None, role_arn=None):
+        if region:
+            if profile:
+                session_obj = boto3.Session(profile_name=profile, region_name=region)
+            elif role_arn:
+                session_obj = self.assume_role(role_arn, region)
+            else:
+                session_obj = boto3.Session(region_name=region)
+            return session_obj.client(resource)
+        else:
+            if profile:
+                session_obj = boto3.Session(profile_name=profile)
+            elif role_arn:
+                session_obj = self.assume_role(role_arn)
+            else:
+                session_obj = boto3.Session()
+            return session_obj.client(resource)
+
+
+    def assume_role(self, role_arn, region=None):
+        sts = boto3.client("sts")
+        assumed_role_obj = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName="IMDShift"
+        )['Credentials']
         
+        session = boto3.Session(
+            aws_access_key_id=assumed_role_obj['AccessKeyId'],
+            aws_secret_access_key=assumed_role_obj['SecretAccessKey'],
+            aws_session_token=assumed_role_obj['SessionToken'],
+            region_name=region
+        ) if region else \
+            boto3.Session(
+            aws_access_key_id=assumed_role_obj['AccessKeyId'],
+            aws_secret_access_key=assumed_role_obj['SecretAccessKey'],
+            aws_session_token=assumed_role_obj['SessionToken']
+        )
+        
+        return session
+    
 class EC2():
     
-    def __init__(self, regions=None) -> None:
+    def __init__(self, regions=None, profile=None, role_arn=None) -> None:
         self.regions = regions
         self.aws_utils = AWS_Utils()
         self.ec2 = None
+        self.profile = profile
+        self.role_arn = role_arn
         self.resource_list = list()
         self.resources_with_imds_v1 = list()
         self.resource_with_metadata_disabled = list()
@@ -39,10 +77,10 @@ class EC2():
     
     def generate_result(self):
         for region in self.regions:
-            self.process_result(region)
+            self.process_result(region, self.profile, self.role_arn)
     
-    def process_result(self, region):
-        self.ec2 = self.aws_utils.generate_client("ec2", region)
+    def process_result(self, region, profile=None, role_arn=None):
+        self.ec2 = self.aws_utils.generate_client("ec2", region, profile, role_arn)
         instances_details = self.ec2.get_paginator('describe_instances')
         for page in instances_details.paginate():
             for reservation in page['Reservations']:
@@ -159,7 +197,7 @@ class Sagemaker():
     def migrate_resources(self):
         ...
 
-
+# Auto Scaling Groups
 class ASG():
 
     def __init__(self, regions=None, ec2_obj=None):

@@ -12,9 +12,9 @@ from .AWS import EC2, Sagemaker, ASG, Lightsail, ECS, EKS, Beanstalk
 SERVICES_LIST = ['EC2', 'Sagemaker', 'ASG', 'Lightsail', 'ECS', 'EKS', 'Beanstalk']
 
 class ScanRegion():
-    def __init__(self, included_regions=None, excluded_regions=None):
+    def __init__(self, included_regions=None, excluded_regions=None, profile=None, role_arn=None):
         self.aws_utils = AWS_Utils()
-        self.all_regions = self.aws_utils.get_enabled_regions()
+        self.all_regions = self.aws_utils.get_enabled_regions(profile, role_arn)
         self.included_regions = included_regions or "ALL"
         self.excluded_regions = excluded_regions or []
 
@@ -59,7 +59,8 @@ class ScanRegion():
 
 
 def trigger_scan(services, regions=None, migrate=False, \
-                 update_hop_limit=None, enable_imds=False):
+                 update_hop_limit=None, enable_imds=False, \
+                    profile = None, role_arn=None):
 
         for service in SERVICES_LIST:
 
@@ -69,7 +70,7 @@ def trigger_scan(services, regions=None, migrate=False, \
                 services.pop(services.index(service))
 
                 if service == 'EC2':
-                    ec2_obj = EC2(regions=regions)
+                    ec2_obj = EC2(regions=regions, profile=profile, role_arn=role_arn)
                     ec2_obj.generate_result()
 
                     if update_hop_limit != None:
@@ -152,10 +153,6 @@ def trigger_scan(services, regions=None, migrate=False, \
 
                         if migrate:
                             ec2_obj.migrate_resources()
-
-
-
-                
 
 
 def validate_services(services):
