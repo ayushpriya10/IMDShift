@@ -18,7 +18,6 @@ class AWS_Utils():
         enabled_regions = [region['RegionName']\
                            for region in client.describe_regions()['Regions']\
                             if region['OptInStatus'] in ["opt-in-not-required", "opted-in"]]
-        
         return enabled_regions
 
 
@@ -59,7 +58,6 @@ class AWS_Utils():
             aws_secret_access_key=assumed_role_obj['SecretAccessKey'],
             aws_session_token=assumed_role_obj['SessionToken']
         )
-        
         return session
     
 class EC2():
