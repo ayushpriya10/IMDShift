@@ -38,4 +38,4 @@ def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_
         click.echo(f"[+] Scanning specified services: {', '.join(services)}")
         click.echo(f"[+] Scanning Region: {regions}")
         validate_services(services)
-        #trigger_scan(services=services,regions=regions, migrate=migrate, update_hop_limit=update_hop_limit, enable_imds=enable_imds, profile=profile, role_arn=role_arn)
+        trigger_scan(services=services,regions=regions, migrate=migrate, update_hop_limit=update_hop_limit, enable_imds=enable_imds, profile=profile, role_arn=role_arn)
