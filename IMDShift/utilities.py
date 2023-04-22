@@ -276,6 +276,7 @@ def print_policies():
     click.secho("[+] Printing SCPs associated with IMDS usage.")
     click.secho(f"{SCPS_STRINGS}", bold=True, fg='green')
 
+
     click.secho("[+] References for the SCPs:")
     click.secho("  * https://cloudsecdocs.com/aws/services/iam/organizations/#sample-scps:~:text=Require%20role%20credentials%20for%20an%20EC2%20to%20have%20been%20retrieved%20using%20the%20IMDSv2%3A", fg='yellow')
     click.secho("  * https://aws.amazon.com/blogs/machine-learning/amazon-sagemaker-notebook-instances-now-support-configuring-and-restricting-imds-versions/", fg='yellow')
