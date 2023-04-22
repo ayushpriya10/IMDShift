@@ -3,6 +3,7 @@ import sys
 
 
 from .utilities import trigger_scan, validate_services, ScanRegion, validate_regions
+
 CLI_PROMPT = """
  /$$$$$$ /$$      /$$ /$$$$$$$   /$$$$$$  /$$       /$$  /$$$$$$   /$$    
 |_  $$_/| $$$    /$$$| $$__  $$ /$$__  $$| $$      |__/ /$$__  $$ | $$    
@@ -28,7 +29,12 @@ click.secho(CLI_PROMPT, bold=True, fg='cyan')
 @click.option('--enable-imds', is_flag=True, default=False, help='This boolean flag enables IMDShift to enable the metadata endpoint for resources that have it disabled and then perform the migration, defaults to "False". Format: "--enable-imds"')
 @click.option('--profile', type=str, default=None, help='This allows you to use any profile from your ~/.aws/credentials file. Format: "--profile prod-env"')
 @click.option('--role-arn', type=str, default=None, help='This flag let\'s you assume a role via aws sts. Format: "--role-arn arn:aws:sts::111111111:role/John"')
-def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_limit, enable_imds, profile, role_arn):
+@click.option('--print-scps', is_flag=True, default=False, help='This boolean flag prints Service Control Policies (SCPs) that can be used to control IMDS usage, like deny access for credentials fetched from IMDSv2 or deny creation of resources with IMDSv1, defaults to "False". Format: "--print-scps"')
+def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_limit, enable_imds, profile, role_arn, print_scps):
+    if print_scps:
+        ...
+
+
     if services == None:
         click.secho('[!] No services specified to scan. Exiting.', bold=True, fg='red')
 

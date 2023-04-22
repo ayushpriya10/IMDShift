@@ -2,14 +2,11 @@ import click
 import sys
 import boto3
 
-from time import sleep
-from tqdm import tqdm
-
 from .AWS import AWS_Utils
 from .AWS import EC2, Sagemaker, ASG, Lightsail, ECS, EKS, Beanstalk
 
 
-SERVICES_LIST = ['EC2', 'Sagemaker', 'ASG', 'Lightsail', 'ECS', 'EKS', 'Beanstalk']
+SERVICES_LIST = ['EC2', 'Sagemaker', 'ASG', 'Lightsail', 'ECS', 'EKS', 'Beanstalk', 'Autoscaling']
 
 class ScanRegion():
     def __init__(self, included_regions=None, excluded_regions=None, profile=None, role_arn=None):
@@ -128,7 +125,8 @@ def trigger_scan(services, regions=None, migrate=False, \
 
                         if migrate:
                             ec2_obj.migrate_resources()
-                        
+
+
                 elif service == "ASG" or service == "Autoscaling":
                     ec2_obj = EC2()
                     asg_obj = ASG(regions=regions, ec2_obj=ec2_obj)
@@ -150,7 +148,8 @@ def trigger_scan(services, regions=None, migrate=False, \
                         if migrate:
                             ec2_obj.migrate_resources()
 
-                if service == 'Lightsail':
+
+                elif service == 'Lightsail':
                     lightsail_obj = Lightsail(regions=regions, profile=profile, role_arn=role_arn)
                     lightsail_obj.generate_result()
 
@@ -169,6 +168,27 @@ def trigger_scan(services, regions=None, migrate=False, \
 
                         if migrate:
                             lightsail_obj.migrate_resources(update_hop_limit)
+
+
+                # elif service == 'Sagemaker':
+                #     sagemaker_obj = Sagemaker(regions=regions, profile=profile, role_arn=role_arn)
+                #     sagemaker_obj.generate_result()
+
+                #     if update_hop_limit != None:
+                #         sagemaker_obj.update_hop_limit_for_resources(update_hop_limit)
+
+                #         if enable_imds:
+                #             sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
+
+                #         if migrate:
+                #             sagemaker_obj.migrate_resources(update_hop_limit)
+
+                #     else:
+                #         if enable_imds:
+                #             sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
+
+                #         if migrate:
+                #             sagemaker_obj.migrate_resources(update_hop_limit)
 
 
 

@@ -121,7 +121,7 @@ class EC2():
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
         
     def enable_metadata_for_resources(self, hop_limit=None):
-        click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
+        click.echo(f"[+] Enabling metadata endpoint for EC2 resources for which it is disabled")
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for EC2 resources", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['Placement']['AvailabilityZone'][:-1]
@@ -137,7 +137,7 @@ class EC2():
 
     
     def update_hop_limit_for_resources(self, hop_limit=None):
-        click.echo(f"[+] Updating hop limit for resources with metadata enabled")
+        click.echo(f"[+] Updating hop limit for EC2 resources with metadata enabled")
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for EC2 resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['Placement']['AvailabilityZone'][:-1]
@@ -172,28 +172,118 @@ class EC2():
 
 class Sagemaker():
 
-    def __init__(self) -> None:
-        ...
+    def __init__(self, regions=None, profile=None, role_arn=None) -> None:
+        self.regions = regions
+        self.aws_utils = AWS_Utils()
+        self.sagemaker = None
+        self.profile = profile
+        self.role_arn = role_arn
+        self.resource_list = list()
+        self.resources_with_imds_v1 = list()
+        self.resource_with_metadata_disabled = list()
+        self.resources_with_hop_limit_1 = list()
+    
+    def generate_result(self):
+        for region in self.regions:
+            self.process_result(region, self.profile, self.role_arn)
+    
+    def process_result(self, region, profile=None, role_arn=None):
+        try:
+            self.sagemaker = self.aws_utils.generate_client("sagemaker", region, profile, role_arn)
+            instances_details = self.sagemaker.get_paginator('list_notebook_instances')
+            for page in instances_details.paginate():
+                for instance in page:
+                    self.resource_list.extend(instance)
 
-
-    def list_resources(self):
-        ...
-
+            self.analyse_resources()
+        
+        except Exception as error:
+            click.secho(f'[!] An error occurred while listing Sagemaker resources.', bold=True, fg='red')
+            click.secho(f'[!] Error message: {error}.', bold=True, fg='red')
 
     def analyse_resources(self):
-        ...
+
+        progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing Sagemaker resources", colour='green', unit=' resources')
+        
+        for resource in progress_bar_with_resources:
+
+            try:
+            
+                if resource['metadataOptions']['httpEndpoint'] == 'disabled':
+                    self.resource_with_metadata_disabled.append(resource)
+                
+                if resource['metadataOptions']['httpTokens'] != 'required':
+                    self.resources_with_imds_v1.append(resource)
+                
+                if resource['metadataOptions']['httpPutResponseHopLimit'] == 1:
+                    self.resources_with_hop_limit_1.append(resource)
+
+            except KeyError as error:
+                click.secho(f'[!] An error occurred while analysing Sagemaker resource.', bold=True, fg='red')
+                click.secho(f'[!] Error message: {error}.\n', bold=True, fg='red')            
 
 
-    def enable_metadata_for_resources(self):
-        ...
+        stats_table = PrettyTable()
+        stats_table.align = 'c' 
+        stats_table.valign = 'c' 
+        # stats_table.field_names = ['Metadata Disabled', 'IMDSv1 Enabled', 'Hop Limit = 1', 'Total Resources']
+        stats_table.field_names = ['IMDSv1 Enabled', 'Total Resources']
+        stats_table.add_row(
+            [
+                # len(self.resource_with_metadata_disabled),
+                len(self.resources_with_imds_v1),
+                # len(self.resources_with_hop_limit_1),
+                len(self.resource_list)
+            ]
+        )
+
+        click.echo(f"[+] Statistics from analysis:")
+        click.secho(stats_table.get_string(), bold=True, fg='yellow')
+
+    # def enable_metadata_for_resources(self, hop_limit=None):
+    #     click.echo(f"[+] Enabling metadata endpoint for Sagemaker resources for which it is disabled")
+    #     progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for Sagemaker resources", colour='green', unit=' resources')
+    #     for resource in progress_bar_with_resources:
+    #         region = resource['location']['regionName']
+    #         lightsail = self.aws_utils.generate_client("sagemaker", region)
+    #         response = lightsail.update_instance_metadata_options(
+    #             instanceName = resource['name'],
+    #             httpTokens = 'required',
+    #             httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+    #             httpEndpoint = 'enabled',
+    #             httpProtocolIpv6 = 'disabled',
+    #         ) 
 
     
-    def update_hop_limit_for_resources(self):
-        ...
+    # def update_hop_limit_for_resources(self, hop_limit=None):
+    #     click.echo(f"[+] Updating hop limit for Sagemaker resources with metadata enabled")
+    #     progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for Sagemaker resources to {hop_limit}", colour='green', unit=' resources')
+    #     for resource in progress_bar_with_resources:
+    #         region = resource['location']['regionName']
+    #         lightsail = self.aws_utils.generate_client("sagemaker", region)
+    #         response = lightsail.update_instance_metadata_options(
+    #             instanceName = resource['name'],
+    #             httpTokens = 'required',
+    #             httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+    #             httpEndpoint = 'enabled',
+    #             httpProtocolIpv6 = 'disabled',
+    #         )
 
 
-    def migrate_resources(self):
-        ...
+    def migrate_resources(self, hop_limit=None):
+        click.echo(f"[+] Performing migration of Sagemaker resources to IMDSv2")
+        progress_bar_with_resources = tqdm(self.resources_with_imds_v1, desc=f"[+] Migrating all Sagemaker resources to IMDSv2", colour='green', unit=' resources')
+        for resource in progress_bar_with_resources:
+            region = resource['location']['regionName']
+            lightsail = self.aws_utils.generate_client("sagemaker", region)
+            response = lightsail.update_instance_metadata_options(
+                instanceName = resource['name'],
+                httpTokens = 'required',
+                httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+                httpEndpoint = 'enabled',
+                httpProtocolIpv6 = 'disabled',
+            )
+
 
 # Auto Scaling Groups
 class ASG():
@@ -261,9 +351,8 @@ class Lightsail():
             for page in instances_details.paginate():
                 for key in page:
                     if key == 'instances':
-                        self.resource_list.extend(page['instances']) #['Instances'])
+                        self.resource_list.extend(page['instances'])
 
-            # print(self.resource_list)
             self.analyse_resources()
         
         except Exception as error:
@@ -309,7 +398,7 @@ class Lightsail():
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
     def enable_metadata_for_resources(self, hop_limit=None):
-        click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
+        click.echo(f"[+] Enabling metadata endpoint for Lightsail resources for which it is disabled")
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for Lightsail resources", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['location']['regionName']
@@ -324,7 +413,7 @@ class Lightsail():
 
     
     def update_hop_limit_for_resources(self, hop_limit=None):
-        click.echo(f"[+] Updating hop limit for resources with metadata enabled")
+        click.echo(f"[+] Updating hop limit for Lightsail resources with metadata enabled")
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for Lightsail resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['location']['regionName']
