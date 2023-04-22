@@ -5,3 +5,4 @@ lib/
 IMDShift.egg-info/
 .Python
 pyvenv.cfg
+*__pycache__*
