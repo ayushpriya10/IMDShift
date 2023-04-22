@@ -239,28 +239,119 @@ class ASG():
 
 class Lightsail():
 
-    def __init__(self) -> None:
-        ...
+    def __init__(self, regions=None, profile=None, role_arn=None) -> None:
+        self.regions = regions
+        self.aws_utils = AWS_Utils()
+        self.lightsail = None
+        self.profile = profile
+        self.role_arn = role_arn
+        self.resource_list = list()
+        self.resources_with_imds_v1 = list()
+        self.resource_with_metadata_disabled = list()
+        self.resources_with_hop_limit_1 = list()
+    
+    def generate_result(self):
+        for region in self.regions:
+            self.process_result(region, self.profile, self.role_arn)
+    
+    def process_result(self, region, profile=None, role_arn=None):
+        try:
+            self.lightsail = self.aws_utils.generate_client("lightsail", region, profile, role_arn)
+            instances_details = self.lightsail.get_paginator('get_instances')
+            for page in instances_details.paginate():
+                for key in page:
+                    if key == 'instances':
+                        self.resource_list.extend(page['instances']) #['Instances'])
 
-
-    def list_resources(self):
-        ...
-
+            # print(self.resource_list)
+            self.analyse_resources()
+        
+        except Exception as error:
+            click.secho(f'[!] An error occurred while listing Lightsail resources.', bold=True, fg='red')
+            click.secho(f'[!] Error message: {error}.', bold=True, fg='red')
 
     def analyse_resources(self):
-        ...
+
+        progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing Lightsail resources", colour='green', unit=' resources')
+        
+        for resource in progress_bar_with_resources:
+
+            try:
+            
+                if resource['metadataOptions']['httpEndpoint'] == 'disabled':
+                    self.resource_with_metadata_disabled.append(resource)
+                
+                if resource['metadataOptions']['httpTokens'] != 'required':
+                    self.resources_with_imds_v1.append(resource)
+                
+                if resource['metadataOptions']['httpPutResponseHopLimit'] == 1:
+                    self.resources_with_hop_limit_1.append(resource)
+
+            except KeyError as error:
+                click.secho(f'[!] An error occurred while analysing Lightsail resource.', bold=True, fg='red')
+                click.secho(f'[!] Error message: {error}.\n', bold=True, fg='red')            
 
 
-    def enable_metadata_for_resources(self):
-        ...
+        stats_table = PrettyTable()
+        stats_table.align = 'c' 
+        stats_table.valign = 'c' 
+        stats_table.field_names = ['Metadata Disabled', 'IMDSv1 Enabled', 'Hop Limit = 1', 'Total Resources']
+        stats_table.add_row(
+            [
+                len(self.resource_with_metadata_disabled),
+                len(self.resources_with_imds_v1),
+                len(self.resources_with_hop_limit_1),
+                len(self.resource_list)
+            ]
+        )
+
+        click.echo(f"[+] Statistics from analysis:")
+        click.secho(stats_table.get_string(), bold=True, fg='yellow')
+
+    def enable_metadata_for_resources(self, hop_limit=None):
+        click.echo(f"[+] Enabling metadata endpoint for resources for which it is disabled")
+        progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for Lightsail resources", colour='green', unit=' resources')
+        for resource in progress_bar_with_resources:
+            region = resource['location']['regionName']
+            lightsail = self.aws_utils.generate_client("lightsail", region)
+            response = lightsail.update_instance_metadata_options(
+                instanceName = resource['name'],
+                httpTokens = 'required',
+                httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+                httpEndpoint = 'enabled',
+                httpProtocolIpv6 = 'disabled',
+            ) 
 
     
-    def update_hop_limit_for_resources(self):
-        ...
+    def update_hop_limit_for_resources(self, hop_limit=None):
+        click.echo(f"[+] Updating hop limit for resources with metadata enabled")
+        progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for Lightsail resources to {hop_limit}", colour='green', unit=' resources')
+        for resource in progress_bar_with_resources:
+            region = resource['location']['regionName']
+            lightsail = self.aws_utils.generate_client("lightsail", region)
+            response = lightsail.update_instance_metadata_options(
+                instanceName = resource['name'],
+                httpTokens = 'required',
+                httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+                httpEndpoint = 'enabled',
+                httpProtocolIpv6 = 'disabled',
+            )
 
 
-    def migrate_resources(self):
-        ...
+    def migrate_resources(self, hop_limit=None):
+        click.echo(f"[+] Performing migration of Lightsail resources to IMDSv2")
+        progress_bar_with_resources = tqdm(self.resources_with_imds_v1, desc=f"[+] Migrating all Lightsail resources to IMDSv2", colour='green', unit=' resources')
+        for resource in progress_bar_with_resources:
+            region = resource['location']['regionName']
+            lightsail = self.aws_utils.generate_client("lightsail", region)
+            response = lightsail.update_instance_metadata_options(
+                instanceName = resource['name'],
+                httpTokens = 'required',
+                httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
+                httpEndpoint = 'enabled',
+                httpProtocolIpv6 = 'disabled',
+            )
+
 
 # Elastic Container Service
 class ECS():
@@ -389,5 +480,7 @@ if __name__ == '__main__':
     aws_obj = AWS_Utils()
     # print(aws_obj.get_enabled_regions())
 
-    ec2_obj = EC2()
-    ec2_obj.analyse_resources()
+    # ec2_obj = EC2()
+    # ec2_obj.analyse_resources()
+
+    lightsail_obj = Lightsail()

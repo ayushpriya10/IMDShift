@@ -150,6 +150,27 @@ def trigger_scan(services, regions=None, migrate=False, \
                         if migrate:
                             ec2_obj.migrate_resources()
 
+                if service == 'Lightsail':
+                    lightsail_obj = Lightsail(regions=regions, profile=profile, role_arn=role_arn)
+                    lightsail_obj.generate_result()
+
+                    if update_hop_limit != None:
+                        lightsail_obj.update_hop_limit_for_resources(update_hop_limit)
+
+                        if enable_imds:
+                            lightsail_obj.enable_metadata_for_resources(update_hop_limit)
+
+                        if migrate:
+                            lightsail_obj.migrate_resources(update_hop_limit)
+
+                    else:
+                        if enable_imds:
+                            lightsail_obj.enable_metadata_for_resources(update_hop_limit)
+
+                        if migrate:
+                            lightsail_obj.migrate_resources(update_hop_limit)
+
+
 
 def validate_services(services):
     for service in services:
