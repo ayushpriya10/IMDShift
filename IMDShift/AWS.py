@@ -1,10 +1,8 @@
 import boto3
 import click
-import json
-import os
-import sys
+
+from datetime import datetime, timedelta
 from prettytable import PrettyTable
-from time import sleep
 from tqdm import tqdm
 
 
@@ -72,19 +70,89 @@ class EC2():
         self.resources_with_imds_v1 = list()
         self.resource_with_metadata_disabled = list()
         self.resources_with_hop_limit_1 = list()
-    
+        self.imdsv1_usage_analysis = dict()
+
+
     def generate_result(self):
         for region in self.regions:
             self.process_result(region, self.profile, self.role_arn)
+
+
+    def generate_imdsv1_usage_result(self):
+        for region in self.regions:
+            self.process_result(region, self.profile, self.role_arn, analyse_resources_flag=False)
+            self.analyse_imdsv1_usage(region, self.profile, self.role_arn)
+
+        stats_table = PrettyTable()
+        stats_table.align = 'c' 
+        stats_table.valign = 'c' 
+        stats_table.field_names = ['Region', 'Instances using IMDSv1']
+
+        for region_name in self.imdsv1_usage_analysis:
+            stats_table.add_row(
+                [
+                    region_name,
+                    self.imdsv1_usage_analysis[region]
+                ]
+            )
+        
+        click.echo(f"[+] Statistics for IMDSv1 usage:")
+        click.secho(stats_table.get_string(), bold=True, fg='yellow')
+
+
     
-    def process_result(self, region, profile=None, role_arn=None):
+    def process_result(self, region, profile=None, role_arn=None, analyse_resources_flag=True):
         self.ec2 = self.aws_utils.generate_client("ec2", region, profile, role_arn)
         instances_details = self.ec2.get_paginator('describe_instances')
         for page in instances_details.paginate():
             for reservation in page['Reservations']:
                 self.resource_list.extend(reservation['Instances'])
-        self.analyse_resources()
+
+        if analyse_resources_flag:
+            self.analyse_resources()
     
+
+    def analyse_imdsv1_usage(self, region, profile=None, role_arn=None):
+        self.imdsv1_usage_analysis[region] = 0
+        progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing EC2 resources for IMDSv1 usage", colour='green', unit=' resources')
+        
+        for resource in progress_bar_with_resources:
+            cloudwatch_client = self.aws_utils.generate_client('cloudwatch', region, profile, role_arn)
+            get_metric_data = cloudwatch_client.get_paginator('get_metric_data')
+
+            operation_parameters = {
+                "MetricDataQueries": [
+                    {
+                        'Id': 'imdsv1_migration',
+                        'MetricStat': {
+                            'Metric': {
+                                'Namespace': 'AWS/EC2',
+                                'MetricName': 'MetadataNoToken',
+                                'Dimensions': [
+                                    {
+                                    'Name': 'InstanceId',
+                                    'Value': resource['InstanceId']
+                                    }
+                                ]
+                            },
+                            'Period': 60,
+                            'Stat': 'Average',
+                        },
+                    },
+                ],
+                "StartTime": datetime.utcnow() - timedelta(days = 30),
+                "EndTime": datetime.utcnow()
+            }
+
+            response = list()
+            for page in get_metric_data.paginate(**operation_parameters):
+                response.extend(page['MetricDataResults'][0]['Values'])
+
+            sum_of_data_points_values = sum(response)
+    
+            if sum_of_data_points_values > 0:
+                self.imdsv1_usage_analysis[region] += 1
+
 
     def analyse_resources(self):
 

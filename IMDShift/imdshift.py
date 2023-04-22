@@ -2,7 +2,7 @@ import click
 import sys
 
 
-from .utilities import trigger_scan, validate_services, ScanRegion, print_policies
+from .utilities import trigger_scan, validate_services, ScanRegion, print_policies, check_imdsv1_usage
 
 CLI_PROMPT = """
  /$$$$$$ /$$      /$$ /$$$$$$$   /$$$$$$  /$$       /$$  /$$$$$$   /$$    
@@ -30,9 +30,18 @@ click.secho(CLI_PROMPT, bold=True, fg='cyan')
 @click.option('--profile', type=str, default=None, help='This allows you to use any profile from your ~/.aws/credentials file. Format: "--profile prod-env"')
 @click.option('--role-arn', type=str, default=None, help='This flag let\'s you assume a role via aws sts. Format: "--role-arn arn:aws:sts::111111111:role/John"')
 @click.option('--print-scps', is_flag=True, default=False, help='This boolean flag prints Service Control Policies (SCPs) that can be used to control IMDS usage, like deny access for credentials fetched from IMDSv2 or deny creation of resources with IMDSv1, defaults to "False". Format: "--print-scps"')
-def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_limit, enable_imds, profile, role_arn, print_scps):
+@click.option('--check-imds-usage', is_flag=True, default=False, help='This boolean flag launches a scan to identify how many instances are using IMDSv1 in specified regions, during the last 30 days, by using the "MetadataNoToken" CloudWatch metric, defaults to "False". Format: "--check-imds-usage"')
+def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_limit, enable_imds, profile, role_arn, print_scps, check_imds_usage):
     if print_scps:
         print_policies()
+
+
+    if check_imds_usage:
+        regions = ScanRegion(included_regions=include_regions, excluded_regions=exclude_regions, profile=profile, role_arn=role_arn).result()
+        click.echo(f"[+] Analysing IMDSv1 usage, in the last 30 days, with 'MetadataNoToken' CloudWatch metric.")
+        click.echo(f"[+] Scanning Regions: {', '.join(regions)}")
+
+        check_imdsv1_usage(regions=regions, profile=profile, role_arn=role_arn)
 
 
     if services == None:
@@ -42,6 +51,6 @@ def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_
         services = [service.strip() for service in services.split(',')]
         regions = ScanRegion(included_regions=include_regions, excluded_regions=exclude_regions, profile=profile, role_arn=role_arn).result()
         click.echo(f"[+] Scanning specified services: {', '.join(services)}")
-        click.echo(f"[+] Scanning Region: {regions}")
+        click.echo(f"[+] Scanning Regions: {', '.join(regions)}")
         validate_services(services)
         trigger_scan(services=services,regions=regions, migrate=migrate, update_hop_limit=update_hop_limit, enable_imds=enable_imds, profile=profile, role_arn=role_arn)

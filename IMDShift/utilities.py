@@ -1,6 +1,5 @@
 import click
 import sys
-import boto3
 
 from .AWS import AWS_Utils
 from .AWS import EC2, Sagemaker, ASG, Lightsail, ECS, EKS, Beanstalk
@@ -50,6 +49,13 @@ class ScanRegion():
 
     def result(self):
         return self.scan_regions
+
+
+def check_imdsv1_usage(regions=None, profile=None, role_arn=None):
+    ec2_obj = EC2(regions=regions, profile=profile, role_arn=role_arn)
+    ec2_obj.generate_imdsv1_usage_result()
+
+    sys.exit(0)
 
 
 def trigger_scan(services, regions=None, migrate=False, \
