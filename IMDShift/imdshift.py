@@ -2,7 +2,7 @@ import click
 import sys
 
 
-from .utilities import trigger_scan, validate_services, ScanRegion, validate_regions
+from .utilities import trigger_scan, validate_services, ScanRegion, print_policies
 
 CLI_PROMPT = """
  /$$$$$$ /$$      /$$ /$$$$$$$   /$$$$$$  /$$       /$$  /$$$$$$   /$$    
@@ -32,7 +32,7 @@ click.secho(CLI_PROMPT, bold=True, fg='cyan')
 @click.option('--print-scps', is_flag=True, default=False, help='This boolean flag prints Service Control Policies (SCPs) that can be used to control IMDS usage, like deny access for credentials fetched from IMDSv2 or deny creation of resources with IMDSv1, defaults to "False". Format: "--print-scps"')
 def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_limit, enable_imds, profile, role_arn, print_scps):
     if print_scps:
-        ...
+        print_policies()
 
 
     if services == None:
