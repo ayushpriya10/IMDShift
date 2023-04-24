@@ -30,7 +30,7 @@ IMDShift makes several improvements on Metabadger's capabilities:
 ```sh
 git clone https://github.com/ayushpriya10/imdshift.git
 cd imdshift/
-python3 -m pip install setup.py
+python3 -m pip install .
 ```
 
 ### Development Installation
