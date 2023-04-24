@@ -17,6 +17,8 @@ AWS workloads that rely on the metadata endpoint are vulnerable to Server-Side R
 [Metabadger](https://github.com/salesforce/metabadger) is an older tool that was used to facilitate migration of AWS EC2 workloads to IMDSv2.
 
 IMDShift makes several improvements on Metabadger's capabilities:
+* Identify if resources are using IMDSv1, using the `MetadataNoToken` CloudWatch metric across specified regions.
+* Help with post-migration activities, by suggesting various Service Control Policies (SCPs) to implement.
 * IMDShift allows migration of standalone services and not all EC2 instances, blindly. For example, the user can choose to only migrate EKS workloads, also some services such as Lightsail, do not fall under EC2 umbrella, IMDShift has the capability to migrate such resources as well.
 * IMDShift allows standalone enabling of metadata endpoint for resources it is currently disabled, without having perform migration on the remaining resources
 * IMDShift allows standalone update response hop limit for resources where metadata endpoint is enabled, without having to perform migration on the remaining resources
