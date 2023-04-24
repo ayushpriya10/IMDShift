@@ -181,22 +181,8 @@ def trigger_scan(services, regions=None, migrate=False, \
                     sagemaker_obj = Sagemaker(regions=regions, profile=profile, role_arn=role_arn)
                     sagemaker_obj.generate_result()
 
-                    if update_hop_limit != None:
-                        sagemaker_obj.update_hop_limit_for_resources(update_hop_limit)
-
-                        if enable_imds:
-                            sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
-
-                        if migrate:
-                            sagemaker_obj.migrate_resources(update_hop_limit)
-
-                    else:
-                        if enable_imds:
-                            sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
-
-                        if migrate:
-                            sagemaker_obj.migrate_resources(update_hop_limit)
-
+                    if migrate: 
+                        sagemaker_obj.migrate_resources()
 
 def print_policies():
     SCPS_STRINGS = """

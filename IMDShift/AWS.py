@@ -162,7 +162,6 @@ class EC2():
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing EC2 resources", colour='green', unit=' resources')
         
         for resource in progress_bar_with_resources:
-            
             if resource['MetadataOptions']['HttpEndpoint'] == 'disabled':
                 self.resource_with_metadata_disabled.append(resource)
             
@@ -255,18 +254,17 @@ class Sagemaker():
     
     def generate_result(self):
         for region in self.regions:
-            self.process_result(region, self.profile, self.role_arn)
+            self.process_result(region)
     
-    def process_result(self, region, profile=None, role_arn=None):
+    def process_result(self, region):
         try:
-            self.sagemaker = self.aws_utils.generate_client("sagemaker", region, self.profile, self.role_arn)
+            self.sagemaker = self.aws_utils.generate_client("sagemaker", region=region, profile=self.profile, role_arn=self.role_arn)
             instances_details = self.sagemaker.get_paginator('list_notebook_instances')
             for page in instances_details.paginate():
-                for instance in page:
-                    self.resource_list.extend(instance)
-
+                for instance in page["NotebookInstances"]:
+                    name = instance["NotebookInstanceName"]
+                    self.resource_list.append((name, region))
             self.analyse_resources()
-        
         except Exception as error:
             click.secho(f'[!] An error occurred while listing Sagemaker resources.', bold=True, fg='red')
             click.secho(f'[!] Error message: {error}.', bold=True, fg='red')
@@ -274,21 +272,15 @@ class Sagemaker():
     def analyse_resources(self):
 
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing Sagemaker resources", colour='green', unit=' resources')
-        
+
         for resource in progress_bar_with_resources:
-
+            name = resource[0]
             try:
-            
-                if resource['metadataOptions']['httpEndpoint'] == 'disabled':
-                    self.resource_with_metadata_disabled.append(resource)
-                
-                if resource['metadataOptions']['httpTokens'] != 'required':
+                imds = self.define_metadataservice(name)
+                if imds == "1":
                     self.resources_with_imds_v1.append(resource)
-                
-                if resource['metadataOptions']['httpPutResponseHopLimit'] == 1:
-                    self.resources_with_hop_limit_1.append(resource)
-
-            except KeyError as error:
+                    
+            except Exception as error:
                 click.secho(f'[!] An error occurred while analysing Sagemaker resource.', bold=True, fg='red')
                 click.secho(f'[!] Error message: {error}.\n', bold=True, fg='red')            
 
@@ -307,20 +299,30 @@ class Sagemaker():
         click.echo(f"[+] Statistics from analysis:")
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
-    def migrate_resources(self, hop_limit=None):
+    def migrate_resources(self):
         click.echo(f"[+] Performing migration of Sagemaker resources to IMDSv2")
         progress_bar_with_resources = tqdm(self.resources_with_imds_v1, desc=f"[+] Migrating all Sagemaker resources to IMDSv2", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
-            region = resource['location']['regionName']
-            lightsail = self.aws_utils.generate_client("sagemaker", region=region, profile=self.profile, role_arn=self.role_arn)
-            response = lightsail.update_instance_metadata_options(
-                instanceName = resource['name'],
-                httpTokens = 'required',
-                httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
-                httpEndpoint = 'enabled',
-                httpProtocolIpv6 = 'disabled',
-            )
+            region = resource[1]
+            name = resource[0]
+            sagemaker = self.aws_utils.generate_client("sagemaker", region=region, profile=self.profile, role_arn=self.role_arn)
+            try:
+                resource = sagemaker.update_notebook_instance(
+                    NotebookInstanceName=name,
+                    InstanceMetadataServiceConfiguration={
+                            "MinimumInstanceMetadataServiceVersion": '2'
+                        }
+                    )
+            except Exception as error:
+                click.secho(f'[!] An error occurred while analysing Sagemaker resource.', bold=True, fg='red')
+                click.secho(f'[!] Error message: {error}.\n', bold=True, fg='red')            
 
+    def define_metadataservice(self, name):
+        # print(f"[+]Instance: {name}")
+        metadata = self.sagemaker.describe_notebook_instance(
+            NotebookInstanceName=name
+        )["InstanceMetadataServiceConfiguration"]["MinimumInstanceMetadataServiceVersion"]
+        return metadata
 
 # Auto Scaling Groups
 class ASG():
