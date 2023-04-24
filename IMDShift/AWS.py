@@ -20,22 +20,26 @@ class AWS_Utils():
 
 
     def generate_client(self, resource, region=None, profile=None, role_arn=None):
-        if region:
-            if profile:
-                session_obj = boto3.Session(profile_name=profile, region_name=region)
-            elif role_arn:
-                session_obj = self.assume_role(role_arn, region)
+        try:
+            if region:
+                if profile:
+                    session_obj = boto3.Session(profile_name=profile, region_name=region)
+                elif role_arn:
+                    session_obj = self.assume_role(role_arn, region)
+                else:
+                    session_obj = boto3.Session(region_name=region)
+                return session_obj.client(resource)
             else:
-                session_obj = boto3.Session(region_name=region)
-            return session_obj.client(resource)
-        else:
-            if profile:
-                session_obj = boto3.Session(profile_name=profile)
-            elif role_arn:
-                session_obj = self.assume_role(role_arn)
-            else:
-                session_obj = boto3.Session()
-            return session_obj.client(resource)
+                if profile:
+                    session_obj = boto3.Session(profile_name=profile)
+                elif role_arn:
+                    session_obj = self.assume_role(role_arn)
+                else:
+                    session_obj = boto3.Session()
+                return session_obj.client(resource)
+        except:
+            return None
+
 
 
     def assume_role(self, role_arn, region=None):
@@ -99,7 +103,6 @@ class EC2():
         click.echo(f"[+] Statistics for IMDSv1 usage:")
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
-
     
     def process_result(self, region, profile=None, role_arn=None, analyse_resources_flag=True):
         self.ec2 = self.aws_utils.generate_client("ec2", region, profile, role_arn)
@@ -112,12 +115,12 @@ class EC2():
             self.analyse_resources()
     
 
-    def analyse_imdsv1_usage(self, region, profile=None, role_arn=None):
+    def analyse_imdsv1_usage(self, region):
         self.imdsv1_usage_analysis[region] = 0
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Analysing EC2 resources for IMDSv1 usage", colour='green', unit=' resources')
         
         for resource in progress_bar_with_resources:
-            cloudwatch_client = self.aws_utils.generate_client('cloudwatch', region, profile, role_arn)
+            cloudwatch_client = self.aws_utils.generate_client('cloudwatch', region=region, profile=self.profile, role_arn=self.role_arn)
             get_metric_data = cloudwatch_client.get_paginator('get_metric_data')
 
             operation_parameters = {
@@ -193,7 +196,7 @@ class EC2():
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for EC2 resources", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['Placement']['AvailabilityZone'][:-1]
-            ec2 = self.aws_utils.generate_client("ec2", region)
+            ec2 = self.aws_utils.generate_client("ec2", region=region, profile=self.profile, role_arn=self.role_arn)
             response = ec2.modify_instance_metadata_options(
                 InstanceId = resource['InstanceId'],
                 HttpTokens = 'required',
@@ -203,13 +206,13 @@ class EC2():
                 InstanceMetadataTags = 'disabled'
             ) 
 
-    
+    # ecs_obj.ecs
     def update_hop_limit_for_resources(self, hop_limit=None):
         click.echo(f"[+] Updating hop limit for EC2 resources with metadata enabled")
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for EC2 resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['Placement']['AvailabilityZone'][:-1]
-            ec2 = self.aws_utils.generate_client("ec2", region)
+            ec2 = self.aws_utils.generate_client("ec2", region=region, profile=self.profile, role_arn=self.role_arn)
             response = ec2.modify_instance_metadata_options(
                 InstanceId = resource['InstanceId'],
                 HttpTokens = 'required',
@@ -219,15 +222,14 @@ class EC2():
                 InstanceMetadataTags = 'disabled'
             )
 
-
-
+    # Migrate to imdsv2    
     def migrate_resources(self, hop_limit=None):
         click.echo(f"[+] Performing migration of EC2 resources to IMDSv2")
         progress_bar_with_resources = tqdm(self.resource_list, desc=f"[+] Migrating all EC2 resources to IMDSv2", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             if resource not in self.resource_with_metadata_disabled and resource not in  self.resources_with_hop_limit_1:
                 region = resource['Placement']['AvailabilityZone'][:-1]
-                ec2 = self.aws_utils.generate_client("ec2", region)
+                ec2 = self.aws_utils.generate_client("ec2", region=region, profile=self.profile, role_arn=self.role_arn)
                 response = ec2.modify_instance_metadata_options(
                     InstanceId = resource['InstanceId'],
                     HttpTokens = "required",
@@ -257,7 +259,7 @@ class Sagemaker():
     
     def process_result(self, region, profile=None, role_arn=None):
         try:
-            self.sagemaker = self.aws_utils.generate_client("sagemaker", region, profile, role_arn)
+            self.sagemaker = self.aws_utils.generate_client("sagemaker", region, self.profile, self.role_arn)
             instances_details = self.sagemaker.get_paginator('list_notebook_instances')
             for page in instances_details.paginate():
                 for instance in page:
@@ -294,13 +296,10 @@ class Sagemaker():
         stats_table = PrettyTable()
         stats_table.align = 'c' 
         stats_table.valign = 'c' 
-        # stats_table.field_names = ['Metadata Disabled', 'IMDSv1 Enabled', 'Hop Limit = 1', 'Total Resources']
         stats_table.field_names = ['IMDSv1 Enabled', 'Total Resources']
         stats_table.add_row(
             [
-                # len(self.resource_with_metadata_disabled),
                 len(self.resources_with_imds_v1),
-                # len(self.resources_with_hop_limit_1),
                 len(self.resource_list)
             ]
         )
@@ -308,42 +307,12 @@ class Sagemaker():
         click.echo(f"[+] Statistics from analysis:")
         click.secho(stats_table.get_string(), bold=True, fg='yellow')
 
-    # def enable_metadata_for_resources(self, hop_limit=None):
-    #     click.echo(f"[+] Enabling metadata endpoint for Sagemaker resources for which it is disabled")
-    #     progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for Sagemaker resources", colour='green', unit=' resources')
-    #     for resource in progress_bar_with_resources:
-    #         region = resource['location']['regionName']
-    #         lightsail = self.aws_utils.generate_client("sagemaker", region)
-    #         response = lightsail.update_instance_metadata_options(
-    #             instanceName = resource['name'],
-    #             httpTokens = 'required',
-    #             httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
-    #             httpEndpoint = 'enabled',
-    #             httpProtocolIpv6 = 'disabled',
-    #         ) 
-
-    
-    # def update_hop_limit_for_resources(self, hop_limit=None):
-    #     click.echo(f"[+] Updating hop limit for Sagemaker resources with metadata enabled")
-    #     progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for Sagemaker resources to {hop_limit}", colour='green', unit=' resources')
-    #     for resource in progress_bar_with_resources:
-    #         region = resource['location']['regionName']
-    #         lightsail = self.aws_utils.generate_client("sagemaker", region)
-    #         response = lightsail.update_instance_metadata_options(
-    #             instanceName = resource['name'],
-    #             httpTokens = 'required',
-    #             httpPutResponseHopLimit = hop_limit if hop_limit != None else 2,
-    #             httpEndpoint = 'enabled',
-    #             httpProtocolIpv6 = 'disabled',
-    #         )
-
-
     def migrate_resources(self, hop_limit=None):
         click.echo(f"[+] Performing migration of Sagemaker resources to IMDSv2")
         progress_bar_with_resources = tqdm(self.resources_with_imds_v1, desc=f"[+] Migrating all Sagemaker resources to IMDSv2", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['location']['regionName']
-            lightsail = self.aws_utils.generate_client("sagemaker", region)
+            lightsail = self.aws_utils.generate_client("sagemaker", region=region, profile=self.profile, role_arn=self.role_arn)
             response = lightsail.update_instance_metadata_options(
                 instanceName = resource['name'],
                 httpTokens = 'required',
@@ -356,20 +325,22 @@ class Sagemaker():
 # Auto Scaling Groups
 class ASG():
 
-    def __init__(self, regions=None, ec2_obj=None):
+    def __init__(self, regions=None, ec2_obj=None, profile=None, role_arn=None):
         self.regions = regions
         self.ec2_obj = ec2_obj
         self.aws_utils = AWS_Utils()
         self.ec2 = None
-        self.autoscaling = None    
+        self.autoscaling = None
+        self.profile = profile
+        self.role_arn = role_arn    
 
     def generate_results(self):
         for region in self.regions:
             self.process_result(region)
 
     def process_result(self, region):
-        self.autoscaling = self.aws_utils.generate_client("autoscaling", region)
-        self.ec2 = self.aws_utils.generate_client("ec2", region)
+        self.autoscaling = self.aws_utils.generate_client("autoscaling", region=region, profile=self.profile, role_arn=self.role_arn)
+        self.ec2 = self.aws_utils.generate_client("ec2", region=region, profile=self.profile, role_arn=self.role_arn)
         instances = self.list_asg_instances()
         instance_data = self.asg_instance_data(instances)
         self.ec2_obj.resource_list = instance_data
@@ -470,7 +441,7 @@ class Lightsail():
         progress_bar_with_resources = tqdm(self.resource_with_metadata_disabled, desc=f"[+] Enabling metadata for Lightsail resources", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['location']['regionName']
-            lightsail = self.aws_utils.generate_client("lightsail", region)
+            lightsail = self.aws_utils.generate_client("lightsail", region=region, profile=self.profile, role_arn=self.role_arn)
             response = lightsail.update_instance_metadata_options(
                 instanceName = resource['name'],
                 httpTokens = 'required',
@@ -485,7 +456,7 @@ class Lightsail():
         progress_bar_with_resources = tqdm(self.resources_with_hop_limit_1, desc=f"[+] Updating hop limit for Lightsail resources to {hop_limit}", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['location']['regionName']
-            lightsail = self.aws_utils.generate_client("lightsail", region)
+            lightsail = self.aws_utils.generate_client("lightsail", region=region, profile=self.profile, role_arn=self.role_arn)
             response = lightsail.update_instance_metadata_options(
                 instanceName = resource['name'],
                 httpTokens = 'required',
@@ -500,7 +471,7 @@ class Lightsail():
         progress_bar_with_resources = tqdm(self.resources_with_imds_v1, desc=f"[+] Migrating all Lightsail resources to IMDSv2", colour='green', unit=' resources')
         for resource in progress_bar_with_resources:
             region = resource['location']['regionName']
-            lightsail = self.aws_utils.generate_client("lightsail", region)
+            lightsail = self.aws_utils.generate_client("lightsail", region=region, profile=self.profile, role_arn=self.role_arn)
             response = lightsail.update_instance_metadata_options(
                 instanceName = resource['name'],
                 httpTokens = 'required',
@@ -513,16 +484,18 @@ class Lightsail():
 # Elastic Container Service
 class ECS():
 
-    def __init__(self, regions=None, ec2_obj=None):
+    def __init__(self, regions=None, ec2_obj=None, profile=None, role_arn=None):
         self.regions = regions
         self.ec2_obj = ec2_obj
         self.aws_utils = AWS_Utils()
         self.ec2 = None
         self.ecs = None
+        self.profile = profile
+        self.role_arn = role_arn
 
-    def process_result(self, region, ec2_obj=None):
-        self.ec2 = self.aws_utils.generate_client("ec2", region)
-        self.ecs = self.aws_utils.generate_client("ecs", region)
+    def process_result(self, region):
+        self.ec2 = self.aws_utils.generate_client(resource="ec2", region=region, profile=self.profile, role_arn=self.role_arn)
+        self.ecs = self.aws_utils.generate_client(resource="ecs", region=region, profile=self.profile, role_arn=self.role_arn)
         clusters = self.list_clusters()
         instance_data = self.container_instance_data(clusters)
         self.ec2_obj.resource_list = instance_data
@@ -530,7 +503,6 @@ class ECS():
 
     def generate_results(self):
         for region in self.regions:
-            print(region)
             self.process_result(region)
 
     def list_clusters(self):
@@ -557,21 +529,23 @@ class ECS():
 # Elastic Kubernetes Service
 class EKS():
 
-    def __init__(self, regions=None, ec2_obj=None):
+    def __init__(self, regions=None, ec2_obj=None, profile=None, role_arn=None):
         self.regions = regions
         self.ec2_obj = ec2_obj
         self.aws_utils = AWS_Utils()
         self.ec2 = None
         self.eks = None
         self.autoscaling = None
+        self.profile = profile
+        self.role_arn = role_arn
 
     def generate_results(self):
         for region in self.regions:
             self.process_result(region)
     
     def process_result(self, region):
-        self.eks = self.aws_utils.generate_client("eks", region)
-        self.ec2 = self.aws_utils.generate_client("ec2", region)
+        self.eks = self.aws_utils.generate_client(resource="eks", region=region, profile=self.profile, role_arn=self.role_arn)
+        self.ec2 = self.aws_utils.generate_client(resource="ec2", region=region, profile=self.profile, role_arn=self.role_arn)
         self.autoscaling = self.aws_utils.generate_client("autoscaling", region)
         clusters = self.list_clusters()
         instance_data = self.eks_nodegroups(clusters)

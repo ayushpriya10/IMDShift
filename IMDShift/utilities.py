@@ -5,7 +5,7 @@ from .AWS import AWS_Utils
 from .AWS import EC2, Sagemaker, ASG, Lightsail, ECS, EKS, Beanstalk
 
 
-SERVICES_LIST = ['EC2', 'Sagemaker', 'ASG', 'Lightsail', 'ECS', 'EKS', 'Beanstalk', 'Autoscaling']
+SERVICES_LIST = ['EC2', 'SAGEMAKER', 'ASG', 'LIGHTSAIL', 'ECS', 'EKS', 'BEANSTALK', 'AUTOSCALING']
 
 class ScanRegion():
     def __init__(self, included_regions=None, excluded_regions=None, profile=None, role_arn=None):
@@ -91,10 +91,10 @@ def trigger_scan(services, regions=None, migrate=False, \
 
                 
                 elif service == "ECS":
-                    ec2_obj = EC2()
-                    ecs_obj = ECS(regions=regions, ec2_obj=ec2_obj)
+                    ec2_obj = EC2(regions=None, profile=profile, role_arn=role_arn)
+                    ecs_obj = ECS(regions=regions, ec2_obj=ec2_obj, profile=profile, role_arn=role_arn)
                     ecs_obj.generate_results()
-
+                    ecs_obj.ecs 
                     if update_hop_limit != None:
                         ec2_obj.update_hop_limit_for_resources(update_hop_limit)
 
@@ -113,8 +113,8 @@ def trigger_scan(services, regions=None, migrate=False, \
                 
                 
                 elif service == "EKS":
-                    ec2_obj = EC2()
-                    eks_obj = EKS(regions=regions, ec2_obj=ec2_obj)
+                    ec2_obj = EC2(region=None, profile=profile, role_arn=role_arn)
+                    eks_obj = EKS(regions=regions, ec2_obj=ec2_obj, profile=profile, role_arn=role_arn)
                     eks_obj.generate_results()
 
                     if update_hop_limit != None:
@@ -134,9 +134,9 @@ def trigger_scan(services, regions=None, migrate=False, \
                             ec2_obj.migrate_resources()
 
 
-                elif service == "ASG" or service == "Autoscaling":
-                    ec2_obj = EC2()
-                    asg_obj = ASG(regions=regions, ec2_obj=ec2_obj)
+                elif service == "ASG" or service == "AUTOSCALING":
+                    ec2_obj = EC2(region=None, profile=profile, role_arn=role_arn)
+                    asg_obj = ASG(regions=regions, ec2_obj=ec2_obj, profile=profile, role_arn=role_arn)
                     asg_obj.generate_results()
                 
                     if update_hop_limit != None:
@@ -156,7 +156,7 @@ def trigger_scan(services, regions=None, migrate=False, \
                             ec2_obj.migrate_resources()
 
 
-                elif service == 'Lightsail':
+                elif service == 'LIGHTSAIL':
                     lightsail_obj = Lightsail(regions=regions, profile=profile, role_arn=role_arn)
                     lightsail_obj.generate_result()
 
@@ -177,25 +177,25 @@ def trigger_scan(services, regions=None, migrate=False, \
                             lightsail_obj.migrate_resources(update_hop_limit)
 
 
-                # elif service == 'Sagemaker':
-                #     sagemaker_obj = Sagemaker(regions=regions, profile=profile, role_arn=role_arn)
-                #     sagemaker_obj.generate_result()
+                elif service == 'SAGEMAKER':
+                    sagemaker_obj = Sagemaker(regions=regions, profile=profile, role_arn=role_arn)
+                    sagemaker_obj.generate_result()
 
-                #     if update_hop_limit != None:
-                #         sagemaker_obj.update_hop_limit_for_resources(update_hop_limit)
+                    if update_hop_limit != None:
+                        sagemaker_obj.update_hop_limit_for_resources(update_hop_limit)
 
-                #         if enable_imds:
-                #             sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
+                        if enable_imds:
+                            sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
 
-                #         if migrate:
-                #             sagemaker_obj.migrate_resources(update_hop_limit)
+                        if migrate:
+                            sagemaker_obj.migrate_resources(update_hop_limit)
 
-                #     else:
-                #         if enable_imds:
-                #             sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
+                    else:
+                        if enable_imds:
+                            sagemaker_obj.enable_metadata_for_resources(update_hop_limit)
 
-                #         if migrate:
-                #             sagemaker_obj.migrate_resources(update_hop_limit)
+                        if migrate:
+                            sagemaker_obj.migrate_resources(update_hop_limit)
 
 
 def print_policies():

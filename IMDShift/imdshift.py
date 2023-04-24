@@ -48,7 +48,7 @@ def cli_handler(services, include_regions, exclude_regions, migrate, update_hop_
         click.secho('[!] No services specified to scan. Exiting.', bold=True, fg='red')
 
     else:
-        services = [service.strip() for service in services.split(',')]
+        services = [service.strip().upper() for service in services.split(',')]
         regions = ScanRegion(included_regions=include_regions, excluded_regions=exclude_regions, profile=profile, role_arn=role_arn).result()
         click.echo(f"[+] Scanning specified services: {', '.join(services)}")
         click.echo(f"[+] Scanning Regions: {', '.join(regions)}")
