@@ -318,7 +318,6 @@ class Sagemaker():
                 click.secho(f'[!] Error message: {error}.\n', bold=True, fg='red')            
 
     def define_metadataservice(self, name):
-        # print(f"[+]Instance: {name}")
         metadata = self.sagemaker.describe_notebook_instance(
             NotebookInstanceName=name
         )["InstanceMetadataServiceConfiguration"]["MinimumInstanceMetadataServiceVersion"]
@@ -611,9 +610,4 @@ class Beanstalk():
 
 if __name__ == '__main__':
     aws_obj = AWS_Utils()
-    # print(aws_obj.get_enabled_regions())
-
-    # ec2_obj = EC2()
-    # ec2_obj.analyse_resources()
-
     lightsail_obj = Lightsail()
