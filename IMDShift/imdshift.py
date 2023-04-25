@@ -21,7 +21,7 @@ click.secho(CLI_PROMPT, bold=True, fg='cyan')
 
 @click.command()
 
-@click.option('--services', type=str, default=None, help='This flag specifies services scan for IMDSv1 usage from [EC2, Sagemaker, ASG (Auto Scaling Groups), Lightsail, ECS, EKS, Beanstalk]. Format: "--services EC2,Sagemaker,ASG"')
+@click.option('--services', type=str, default=None, help='This flag specifies services to scan for IMDSv1 usage from [EC2, Sagemaker, ASG (Auto Scaling Groups), Lightsail, ECS, EKS, Beanstalk]. Format: "--services EC2,Sagemaker,ASG"')
 @click.option('--include-regions', type=str, default='ALL', help='This flag specifies regions explicitly to include scan for IMDSv1 usage. Format: "--include-regions ap-south-1,ap-southeast-1"')
 @click.option('--exclude-regions', type=str, default=None, help='This flag specifies regions to exclude from the scan explicitly. Format: "--exclude-regions ap-south-1,ap-southeast-1"')
 @click.option('--migrate', is_flag=True, default=False, help='This boolean flag enables IMDShift to perform the migration, defaults to "False". Format: "--migrate"')

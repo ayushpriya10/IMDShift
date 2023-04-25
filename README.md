@@ -11,7 +11,7 @@ AWS workloads that rely on the metadata endpoint are vulnerable to Server-Side R
 * Standalone hop limit update for compatible resources
 * Standalone metadata endpoint enable operation for compatible resources
 * Detailed logging of migration process
-* Identify if resources are using IMDSv1, using the `MetadataNoToken` CloudWatch metric across specified regions
+* Identify resources that are using IMDSv1, using the `MetadataNoToken` CloudWatch metric across specified regions
 * Built-in Service Control Policy (SCP) recommendations
 
 ## IMDShift vs. Metabadger
@@ -20,7 +20,7 @@ AWS workloads that rely on the metadata endpoint are vulnerable to Server-Side R
 
 IMDShift makes several improvements on Metabadger's capabilities:
 * IMDShift allows migration of standalone services and not all EC2 instances, blindly. For example, the user can choose to only migrate EKS workloads, also some services such as Lightsail, do not fall under EC2 umbrella, IMDShift has the capability to migrate such resources as well.
-* IMDShift allows standalone enabling of metadata endpoint for resources it is currently disabled, without having perform migration on the remaining resources
+* IMDShift allows standalone enabling of metadata endpoint for resources it is currently disabled, without having to perform migration on the remaining resources
 * IMDShift allows standalone update response hop limit for resources where metadata endpoint is enabled, without having to perform migration on the remaining resources
 * IMDShift allows, not only the option to include specific regions, but also skip specified regions
 * IMDShift not only allows usage of AWS profiles, but also can assume roles, to work
